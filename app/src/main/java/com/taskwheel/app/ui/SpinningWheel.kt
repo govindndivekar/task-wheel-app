@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -148,7 +149,10 @@ private fun DrawScope.drawSegmentText(
     angle: Float,
     color: Color
 ) {
-    val textRadius = radius * 0.65f
+    // Normalize angle to 0-360 range
+    val normalizedAngle = ((angle % 360f) + 360f) % 360f
+
+    val textRadius = radius * 0.68f
     val angleRad = Math.toRadians(angle.toDouble())
     val x = center.x + textRadius * cos(angleRad).toFloat()
     val y = center.y + textRadius * sin(angleRad).toFloat()
@@ -156,27 +160,78 @@ private fun DrawScope.drawSegmentText(
     drawContext.canvas.nativeCanvas.apply {
         save()
         translate(x, y)
-        rotate(angle + 90f)
+
+        // Calculate rotation: text should be perpendicular to radius
+        // For right side (315-45 deg or 45-135 deg): rotate angle + 90
+        // For left side (135-315 deg): rotate angle - 90 to keep text upright
+        val textRotation = if (normalizedAngle in 90f..270f) {
+            angle - 90f  // Left side - flip to keep readable
+        } else {
+            angle + 90f  // Right side - normal rotation
+        }
+
+        rotate(textRotation)
+
+        // Split long text into multiple lines
+        val lines = splitTextIntoLines(text, maxCharsPerLine = 12)
+        val lineHeight = 12.sp.toPx()
+        val totalHeight = lines.size * lineHeight
+        val startY = -totalHeight / 2 + lineHeight / 2
 
         val paint = android.graphics.Paint().apply {
-            this.color = color.hashCode()
-            textSize = 14.sp.toPx()
+            this.color = color.toArgb()
+            textSize = 11.sp.toPx()
             textAlign = android.graphics.Paint.Align.CENTER
             isAntiAlias = true
             isFakeBoldText = true
         }
 
-        // Draw text with shadow for better visibility
         val shadowPaint = android.graphics.Paint(paint).apply {
             this.color = android.graphics.Color.BLACK
-            alpha = 100
+            alpha = 150
         }
 
-        drawText(text, 1f, 1f, shadowPaint)
-        drawText(text, 0f, 0f, paint)
+        // Draw each line
+        lines.forEachIndexed { index, line ->
+            val yPos = startY + (index * lineHeight)
+            // Draw shadow
+            drawText(line, 1f, yPos + 1f, shadowPaint)
+            // Draw text
+            drawText(line, 0f, yPos, paint)
+        }
 
         restore()
     }
+}
+
+private fun splitTextIntoLines(text: String, maxCharsPerLine: Int): List<String> {
+    // If text fits in one line, return it
+    if (text.length <= maxCharsPerLine) {
+        return listOf(text)
+    }
+
+    // Try to split on slash or space
+    val words = text.split("/", " ")
+    val lines = mutableListOf<String>()
+    var currentLine = ""
+
+    for (word in words) {
+        val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+        if (testLine.length <= maxCharsPerLine) {
+            currentLine = testLine
+        } else {
+            if (currentLine.isNotEmpty()) {
+                lines.add(currentLine)
+            }
+            currentLine = word
+        }
+    }
+
+    if (currentLine.isNotEmpty()) {
+        lines.add(currentLine)
+    }
+
+    return lines.ifEmpty { listOf(text) }
 }
 
 private fun DrawScope.drawPointer(center: Offset, radius: Float) {
