@@ -148,7 +148,7 @@ private fun DrawScope.drawSegmentText(
     angle: Float,
     color: Color
 ) {
-    val textRadius = radius * 0.65f
+    val textRadius = radius * 0.7f
     val angleRad = Math.toRadians(angle.toDouble())
     val x = center.x + textRadius * cos(angleRad).toFloat()
     val y = center.y + textRadius * sin(angleRad).toFloat()
@@ -156,11 +156,21 @@ private fun DrawScope.drawSegmentText(
     drawContext.canvas.nativeCanvas.apply {
         save()
         translate(x, y)
-        rotate(angle + 90f)
+
+        // Adjust rotation to keep text readable (not upside down)
+        // Text should be rotated perpendicular to the radius
+        var textRotation = angle + 90f
+
+        // If text would be upside down (on left side of wheel), flip it
+        if (angle > 90f && angle < 270f) {
+            textRotation = angle - 90f
+        }
+
+        rotate(textRotation)
 
         val paint = android.graphics.Paint().apply {
-            this.color = color.hashCode()
-            textSize = 14.sp.toPx()
+            this.color = color.toArgb()
+            textSize = 13.sp.toPx()
             textAlign = android.graphics.Paint.Align.CENTER
             isAntiAlias = true
             isFakeBoldText = true
@@ -169,10 +179,11 @@ private fun DrawScope.drawSegmentText(
         // Draw text with shadow for better visibility
         val shadowPaint = android.graphics.Paint(paint).apply {
             this.color = android.graphics.Color.BLACK
-            alpha = 100
+            alpha = 120
         }
 
-        drawText(text, 1f, 1f, shadowPaint)
+        // Draw shadow slightly offset for depth
+        drawText(text, 1.5f, 1.5f, shadowPaint)
         drawText(text, 0f, 0f, paint)
 
         restore()
